@@ -1,0 +1,11 @@
+conda create -n longlive python=3.10 -y
+conda activate longlive
+
+export PYTHONPATH=./:$PATH
+export CUDA_HOME=/usr/local/cuda-12.4
+export PATH=${CUDA_HOME}/bin:${PATH}
+export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH$  # 保证cuda是12.4
+
+python -m pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu124
+python -m pip install -r requirements.txt
+
