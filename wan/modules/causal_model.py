@@ -113,9 +113,9 @@ class CausalWanSelfAttention(nn.Module):
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
             block_mask (BlockMask)
         """
-        b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
+        b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim # 1, 4680, 12, 128
         if cache_start is None:
-            cache_start = current_start
+            cache_start = current_start 
 
         # query, key, value function
         def qkv_fn(x):
@@ -202,18 +202,18 @@ class CausalWanSelfAttention(nn.Module):
                     block_mask=block_mask
                 )[:, :, :-padded_length].transpose(2, 1)
         else:
-            frame_seqlen = math.prod(grid_sizes[0][1:]).item()
+            frame_seqlen = math.prod(grid_sizes[0][1:]).item() # 1560
             current_start_frame = current_start // frame_seqlen
-            roped_query = causal_rope_apply(
+            roped_query = causal_rope_apply( # 1*4680*12*128
                 q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
             roped_key = causal_rope_apply(
                 k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
 
-            current_end = current_start + roped_query.shape[1]
-            sink_tokens = self.sink_size * frame_seqlen
+            current_end = current_start + roped_query.shape[1] # 表示当前block结束的token下标
+            sink_tokens = self.sink_size * frame_seqlen # 3*1560 = 4680,sink的大小为3帧的token
             # If we are using local attention and the current KV cache size is larger than the local attention size, we need to truncate the KV cache
-            kv_cache_size = kv_cache["k"].shape[1]
-            num_new_tokens = roped_query.shape[1]
+            kv_cache_size = kv_cache["k"].shape[1] # 1*18720*12*128,可以存12帧的token
+            num_new_tokens = roped_query.shape[1] # 4680
             # if (not dist.is_initialized() or dist.get_rank() == 0) and DEBUG:
             #     print("***********before attention***********")
             #     print(f"kv_cache_size = {kv_cache_size / frame_seqlen}")
@@ -317,7 +317,7 @@ class CausalWanSelfAttention(nn.Module):
             # Use temporary k, v to compute attention
             if sink_tokens > 0:
                 # Concatenate sink tokens and local window tokens, keeping total length strictly below max_attention_size
-                local_budget = self.max_attention_size - sink_tokens
+                local_budget = self.max_attention_size - sink_tokens # (18720, 4680) = 14040 or 12-3 = 9
                 k_sink = temp_k[:, :sink_tokens]
                 v_sink = temp_v[:, :sink_tokens]
                 # if (not dist.is_initialized() or dist.get_rank() == 0) and DEBUG:
@@ -418,13 +418,13 @@ class CausalWanAttentionBlock(nn.Module):
             grid_sizes(Tensor): Shape [B, 3], the second dimension contains (F, H, W)
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
-        num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
+        num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1] # 3, 1560
         # assert e.dtype == torch.float32
         # with amp.autocast(dtype=torch.float32):
-        e = (self.modulation.unsqueeze(1) + e).chunk(6, dim=2)
+        e = (self.modulation.unsqueeze(1) + e).chunk(6, dim=2) # e[0].shape 1*3*1*1536
         # assert e[0].dtype == torch.float32
 
-        # self-attention
+        # self-attention, 输入shape 为 1*4680*1536
         self_attn_result = self.self_attn(
             (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2),
             seq_lens, grid_sizes,
@@ -437,7 +437,7 @@ class CausalWanAttentionBlock(nn.Module):
             cache_update_info = None
 
         # with amp.autocast(dtype=torch.float32):
-        x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
+        x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2) # torch.Size([1, 4680, 1536])
 
         # cross-attention & ffn function
         def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None):
@@ -935,12 +935,12 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         # print(f"x.device: {x[0].device}, t.device: {t.device}, context.device: {context.device}, seq_len: {seq_len}")
 
         # embeddings
-        x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
+        x = [self.patch_embedding(u.unsqueeze(0)) for u in x] # torch.Size([1, 16, 3, 60, 104]) -> torch.Size([1, 1536, 3, 30, 52])
         # print("patch embedding done")
         grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
-        x = [u.flatten(2).transpose(1, 2) for u in x]
-        seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
+            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x]) # tensor([[ 3, 30, 52]])
+        x = [u.flatten(2).transpose(1, 2) for u in x] # torch.Size([1, 4680, 1536])
+        seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long) # tensor([4680])
         assert seq_lens.max() <= seq_len
         x = torch.cat(x)
         """
@@ -953,9 +953,9 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         # time embeddings
         # with amp.autocast(dtype=torch.float32):
         e = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
+            sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x)) # 3*1536
         e0 = self.time_projection(e).unflatten(
-            1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
+            1, (6, self.dim)).unflatten(dim=0, sizes=t.shape) # 1*3*6*1536
         # assert e.dtype == torch.float32 and e0.dtype == torch.float32
         # print("time embedding done")
         # context
@@ -965,7 +965,7 @@ class CausalWanModel(ModelMixin, ConfigMixin):
                 torch.cat(
                     [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
                 for u in context
-            ]))
+            ])) # 1*512*1536
         # print("text embedding done")
         if clip_fea is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
@@ -973,11 +973,11 @@ class CausalWanModel(ModelMixin, ConfigMixin):
 
         # arguments
         kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
+            e=e0, # 1*3*6*1536
+            seq_lens=seq_lens, # 32760
+            grid_sizes=grid_sizes, # [3,30,52] = 4680
+            freqs=self.freqs, # 1024*64
+            context=context, # 1*512*1536
             context_lens=context_lens,
             block_mask=self.block_mask
         )
@@ -989,7 +989,7 @@ class CausalWanModel(ModelMixin, ConfigMixin):
 
         cache_update_info = None
         cache_update_infos = []  # Collect cache update info for all blocks
-        for block_index, block in enumerate(self.blocks):
+        for block_index, block in enumerate(self.blocks): # 遍历每个层
             # print(f"block_index: {block_index}")
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 kwargs.update(

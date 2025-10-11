@@ -142,7 +142,7 @@ pipeline.vae.to(device=device)
 
 # ----------------------------- Build dataset -----------------------------
 # Parse switch_frame_indices
-switch_frame_indices: List[int] = [int(x) for x in config.switch_frame_indices.split(",") if x.strip()]
+switch_frame_indices: List[int] = [int(x) for x in config.switch_frame_indices.split(",") if x.strip()] # [40, 80, 120, 160, 200]
 
 # Create dataset
 dataset = MultiTextDataset(config.data_path)
@@ -180,8 +180,8 @@ for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
 
     sampled_noise = torch.randn(
         [
-            config.num_samples,
-            config.num_output_frames,
+            config.num_samples, # 1
+            config.num_output_frames, # 240
             16,
             60,
             104,

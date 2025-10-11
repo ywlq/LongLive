@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Interactive Inference (torchrun)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/interactive_inference.py",
+            "args": [
+                "--config_path",
+                "configs/longlive_interactive_inference.yaml"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0",
+                "LOCAL_RANK": "0",
+                "WORLD_SIZE": "1",
+                "RANK": "0",
+                "MASTER_ADDR": "localhost",
+                "MASTER_PORT": "29500"
+            },
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}"
+        }
+    ]
+}

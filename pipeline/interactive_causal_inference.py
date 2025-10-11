@@ -113,18 +113,18 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
             return_latents: Whether to also return the latent tensor.
             low_memory: Enable low-memory mode.
         """
-        batch_size, num_output_frames, num_channels, height, width = noise.shape
+        batch_size, num_output_frames, num_channels, height, width = noise.shape # (1, 240, 16, 60, 104)
         assert len(text_prompts_list) >= 1, "text_prompts_list must not be empty"
         assert len(switch_frame_indices) == len(text_prompts_list) - 1, (
             "length of switch_frame_indices should be one less than text_prompts_list"
         )
         assert num_output_frames % self.num_frame_per_block == 0
-        num_blocks = num_output_frames // self.num_frame_per_block
+        num_blocks = num_output_frames // self.num_frame_per_block # 80
 
         
         # encode all prompts
         print(text_prompts_list)
-        cond_list = [self.text_encoder(text_prompts=p) for p in text_prompts_list]
+        cond_list = [self.text_encoder(text_prompts=p) for p in text_prompts_list] # torch.Size([1, 512, 4096])
 
         if low_memory:
             gpu_memory_preservation = get_cuda_free_memory_gb(gpu) + 5
@@ -142,12 +142,12 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
         )
 
         # initialize caches
-        local_attn_cfg = getattr(self.args.model_kwargs, "local_attn_size", -1)
+        local_attn_cfg = getattr(self.args.model_kwargs, "local_attn_size", -1) # 12
         kv_policy = ""
         if local_attn_cfg != -1:
             # local attention
-            kv_cache_size = local_attn_cfg * self.frame_seq_length
-            kv_policy = f"int->local, size={local_attn_cfg}"
+            kv_cache_size = local_attn_cfg * self.frame_seq_length # 12 * 1560 = 18720
+            kv_policy = f"int->local, size={local_attn_cfg}" # int->local, size=12
         else:
             # global attention
             kv_cache_size = num_output_frames * self.frame_seq_length
@@ -178,14 +178,14 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
             switch_frame_indices[segment_idx]
             if segment_idx < len(switch_frame_indices)
             else None
-        )
+        ) # indicates the next switch position
 
         if DEBUG:
             print("[MultipleSwitch] all_num_frames", all_num_frames)
             print("[MultipleSwitch] switch_frame_indices", switch_frame_indices)
 
-        for current_num_frames in all_num_frames:
-            if next_switch_pos is not None and current_start_frame >= next_switch_pos:
+        for current_num_frames in all_num_frames: # for every block # next_switch_pos表示下一次prompt切换的位置
+            if next_switch_pos is not None and current_start_frame >= next_switch_pos: # current_start_frame表示当前处理的block里面第一帧的起始下标
                 self._recache_after_switch(output, current_start_frame, cond_list[segment_idx])
                 segment_idx += 1
                 if DEBUG:
@@ -199,29 +199,29 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
                 )
                 print(f"segment_idx: {segment_idx}")
                 print(f"text_prompts_list[segment_idx]: {text_prompts_list[segment_idx]}")
-            cond_in_use = cond_list[segment_idx]
+            cond_in_use = cond_list[segment_idx] # 取出对应的prompt
 
             noisy_input = noise[
                 :, current_start_frame : current_start_frame + current_num_frames
-            ]
+            ] # 取出对应的帧 # shape (1, 3, 16, 60, 104)
 
             # ---------------- Spatial denoising loop ----------------
-            for index, current_timestep in enumerate(self.denoising_step_list):
+            for index, current_timestep in enumerate(self.denoising_step_list): # tensor([1000.0000,  937.5000,  833.3333,  625.0000])
                 timestep = (
                     torch.ones([batch_size, current_num_frames],
                     device=noise.device,
                     dtype=torch.int64)
                     * current_timestep
-                )
+                ) # shape (1, 3) # 每个帧对应的时间步
 
-                if index < len(self.denoising_step_list) - 1:
-                    _, denoised_pred = self.generator(
-                        noisy_image_or_video=noisy_input,
-                        conditional_dict=cond_in_use,
-                        timestep=timestep,
-                        kv_cache=self.kv_cache1,
+                if index < len(self.denoising_step_list) - 1: # 如果不是最后一步
+                    _, denoised_pred = self.generator( # 在generator里面会调用model的forward方法，已经完成了噪声的预测和去噪过程
+                        noisy_image_or_video=noisy_input, # shape (1, 3, 16, 60, 104)
+                        conditional_dict=cond_in_use, # shape (1, 512, 4096)
+                        timestep=timestep, # shape (1, 3)
+                        kv_cache=self.kv_cache1, 
                         crossattn_cache=self.crossattn_cache,
-                        current_start=current_start_frame * self.frame_seq_length,
+                        current_start=current_start_frame * self.frame_seq_length, # 当前block开始的frame对应的token下标 
                     )
                     next_timestep = self.denoising_step_list[index + 1]
                     noisy_input = self.scheduler.add_noise(
@@ -231,8 +231,8 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
                         * torch.ones(
                             [batch_size * current_num_frames], device=noise.device, dtype=torch.long
                         ),
-                    ).unflatten(0, denoised_pred.shape[:2])
-                else:
+                    ).unflatten(0, denoised_pred.shape[:2])  # 重新加噪到下一个timestep
+                else: # at last step
                     _, denoised_pred = self.generator(
                         noisy_image_or_video=noisy_input,
                         conditional_dict=cond_in_use,
@@ -245,7 +245,7 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
             # Record output
             output[:, current_start_frame : current_start_frame + current_num_frames] = denoised_pred.to(output.device)
 
-            # rerun with clean context to update cache
+            # rerun with clean context to update cache, 把timestep设置成0,重新跑一遍，更新cache
             context_timestep = torch.ones_like(timestep) * self.args.context_noise
             self.generator(
                 noisy_image_or_video=denoised_pred,

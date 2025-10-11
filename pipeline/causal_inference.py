@@ -31,10 +31,10 @@ class CausalInferencePipeline(torch.nn.Module):
         # Step 2: Initialize all causal hyperparmeters
         self.scheduler = self.generator.get_scheduler()
         self.denoising_step_list = torch.tensor(
-            args.denoising_step_list, dtype=torch.long)
+            args.denoising_step_list, dtype=torch.long) # tensor([1000,  750,  500,  250])
         if args.warp_denoising_step:
             timesteps = torch.cat((self.scheduler.timesteps.cpu(), torch.tensor([0], dtype=torch.float32)))
-            self.denoising_step_list = timesteps[1000 - self.denoising_step_list]
+            self.denoising_step_list = timesteps[1000 - self.denoising_step_list] # tensor([1000.0000,  937.5000,  833.3333,  625.0000])
 
         # hard code for Wan2.1-T2V-1.3B
         self.num_transformer_blocks = 30
@@ -42,8 +42,8 @@ class CausalInferencePipeline(torch.nn.Module):
 
         self.kv_cache1 = None
         self.args = args
-        self.num_frame_per_block = getattr(args, "num_frame_per_block", 1)
-        self.local_attn_size = args.model_kwargs.local_attn_size
+        self.num_frame_per_block = getattr(args, "num_frame_per_block", 1) # 3
+        self.local_attn_size = args.model_kwargs.local_attn_size # 12
 
         # Normalize to list if sequence-like (e.g., OmegaConf ListConfig)
 

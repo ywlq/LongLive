@@ -245,12 +245,12 @@ class WanDiffusionWrapper(torch.nn.Module):
         # X0 prediction
         if kv_cache is not None:
             flow_pred = self.model(
-                noisy_image_or_video.permute(0, 2, 1, 3, 4),
+                noisy_image_or_video.permute(0, 2, 1, 3, 4), # shape (1, 16, 3, 60, 104)
                 t=input_timestep, context=prompt_embeds,
                 seq_len=self.seq_len,
-                kv_cache=kv_cache,
-                crossattn_cache=crossattn_cache,
-                current_start=current_start,
+                kv_cache=kv_cache, # 每一层都存了一份，分别是 k 、v、global_end_index、loacl_end_index
+                crossattn_cache=crossattn_cache, # 每一层都存了一份，分别是 k 、v、is_init
+                current_start=current_start, # # 当前block开始的frame对应的token下标
                 cache_start=cache_start
             ).permute(0, 2, 1, 3, 4)
         else:
@@ -287,7 +287,7 @@ class WanDiffusionWrapper(torch.nn.Module):
             flow_pred=flow_pred.flatten(0, 1),
             xt=noisy_image_or_video.flatten(0, 1),
             timestep=timestep.flatten(0, 1)
-        ).unflatten(0, flow_pred.shape[:2])
+        ).unflatten(0, flow_pred.shape[:2])  # 1*3*16*60*104
 
         if logits is not None:
             return flow_pred, pred_x0, logits

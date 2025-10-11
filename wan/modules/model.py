@@ -176,7 +176,7 @@ class WanT2VCrossAttention(WanSelfAttention):
                 crossattn_cache["is_init"] = True
                 k = self.norm_k(self.k(context)).view(b, -1, n, d)
                 v = self.v(context).view(b, -1, n, d)
-                crossattn_cache["k"] = k
+                crossattn_cache["k"] = k # 1*512*12*128
                 crossattn_cache["v"] = v
             else:
                 k = crossattn_cache["k"]
