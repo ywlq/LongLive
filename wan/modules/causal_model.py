@@ -213,9 +213,9 @@ class CausalWanSelfAttention(nn.Module):
             sink_tokens = self.sink_size * frame_seqlen # 3*1560 = 4680,sink的大小为3帧的token
             # If we are using local attention and the current KV cache size is larger than the local attention size, we need to truncate the KV cache
             kv_cache_size = kv_cache["k"].shape[1] # 1*18720*12*128,可以存12帧的token
-            num_new_tokens = roped_query.shape[1] # 4680
+            num_new_tokens = roped_query.shape[1] # 
             # if (not dist.is_initialized() or dist.get_rank() == 0) and DEBUG:
-            #     print("***********before attention***********")
+            #     print("***********before attention4680***********")
             #     print(f"kv_cache_size = {kv_cache_size / frame_seqlen}")
             #     print(f"torch.is_grad_enabled() = {torch.is_grad_enabled()}")
             #     print(f"current_end = {current_end / frame_seqlen}")
@@ -228,11 +228,11 @@ class CausalWanSelfAttention(nn.Module):
             cache_update_info = None
             is_recompute = current_end <= kv_cache["global_end_index"].item() and current_start > 0
             if self.local_attn_size != -1 and (current_end > kv_cache["global_end_index"].item()) and (
-                    num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size):
+                    num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size): # 不是recompute，而且加入新的token后，local_end_index大于kv_cache_size
                 # Calculate the number of new tokens added in this step
                 # Shift existing cache content left to discard oldest tokens
-                num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size
-                num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens
+                num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size # 需要移除的token数量
+                num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens # 需要先前移动的token数量，除去sink的token
                 # if (not dist.is_initialized() or dist.get_rank() == 0) and DEBUG:
                 #     print(f"need roll")
                 #     print(f"num_rolled_tokens: {num_rolled_tokens / frame_seqlen}")

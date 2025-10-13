@@ -51,10 +51,10 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
         if current_start_frame == 0:
             return
         
-        num_recache_frames = current_start_frame if self.local_attn_size == -1 else min(self.local_attn_size, current_start_frame)
-        recache_start_frame = current_start_frame - num_recache_frames
+        num_recache_frames = current_start_frame if self.local_attn_size == -1 else min(self.local_attn_size, current_start_frame) # 12
+        recache_start_frame = current_start_frame - num_recache_frames # 42-12 = 30
         
-        frames_to_recache = output[:, recache_start_frame:current_start_frame]
+        frames_to_recache = output[:, recache_start_frame:current_start_frame] # output[:, 30:42]
         # move to gpu
         if frames_to_recache.device.type == 'cpu':
             target_device = next(self.generator.parameters()).device
@@ -186,8 +186,10 @@ class InteractiveCausalInferencePipeline(CausalInferencePipeline):
 
         for current_num_frames in all_num_frames: # for every block # next_switch_pos表示下一次prompt切换的位置
             if next_switch_pos is not None and current_start_frame >= next_switch_pos: # current_start_frame表示当前处理的block里面第一帧的起始下标
-                self._recache_after_switch(output, current_start_frame, cond_list[segment_idx])
+                # fix
                 segment_idx += 1
+                self._recache_after_switch(output, current_start_frame, cond_list[segment_idx])
+                
                 if DEBUG:
                     print(
                         f"[MultipleSwitch] Switch to segment {segment_idx} at frame {current_start_frame}"
